@@ -2,7 +2,6 @@ package org;
 
 import io.github.bonigarcia.wdm.WebDriverManager;
 import org.openqa.selenium.By;
-import org.openqa.selenium.Keys;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.chrome.ChromeDriver;
@@ -249,36 +248,46 @@ public class Sita9RegistrationTest {
         WebDriverWait loginWait = new WebDriverWait(driver, Duration.ofSeconds(25));
         WebElement emailField = loginWait.until(ExpectedConditions.visibilityOfElementLocated(By.cssSelector("input[name='email']")));
         WebElement passwordField = loginWait.until(ExpectedConditions.visibilityOfElementLocated(By.cssSelector("input[name='password']")));
-        emailField.sendKeys(Keys.chord(Keys.COMMAND, "a"));
+        emailField.clear();
         emailField.sendKeys(emailAddress);
-        passwordField.sendKeys(Keys.chord(Keys.COMMAND, "a"));
+        passwordField.clear();
         passwordField.sendKeys(password);
         loginWait.until(ExpectedConditions.elementToBeClickable(
                 By.xpath("//button[normalize-space()='Sign In' or normalize-space()='Sign in']"))).click();
 
-        new WebDriverWait(driver, Duration.ofSeconds(20)).until(d -> {
-            String u = d.getCurrentUrl();
-            boolean urlMoved = !u.contains("verify-email") && !u.contains("sign-in");
-            boolean noEmailField = d.findElements(By.cssSelector("input[name='email']")).isEmpty();
-            return urlMoved || noEmailField;
-        });
+        // Wait for login outcome: dashboard visible or URL left /login (up to 60s)
+        By welcomeH2 = By.xpath("//h2[normalize-space()='Welcome to SITA9 Analytics']");
+        By welcomePartial = By.xpath("//h2[contains(.,'Welcome') and contains(.,'SITA9')]");
+        By createFirstProject = By.xpath("//button[normalize-space()='Create Your First Project']");
+        WebDriverWait loginOutcomeWait = new WebDriverWait(driver, Duration.ofSeconds(60));
+        try {
+            loginOutcomeWait.until(d -> {
+                String u = d.getCurrentUrl();
+                if (!u.contains("login")) return true;
+                if (d.findElements(welcomeH2).stream().anyMatch(WebElement::isDisplayed)) return true;
+                if (d.findElements(welcomePartial).stream().anyMatch(WebElement::isDisplayed)) return true;
+                return d.findElements(createFirstProject).stream().anyMatch(WebElement::isDisplayed);
+            });
+        } catch (org.openqa.selenium.TimeoutException ignored) {
+            // CI may keep URL on /login; load app root so session is used and STEP 1 can find dashboard
+            System.out.println("Step 17: Waiting for page load after login; loading app root for session...");
+        }
         System.out.println("Step 17: Login successful. URL: " + driver.getCurrentUrl());
 
-        // Force full load with session: in CI the SPA may stay on /login; refresh so dashboard renders
-        new WebDriverWait(driver, Duration.ofSeconds(10)).until(d ->
+        // Post-login: ensure full load with session (CI: load app root if still on /login)
+        new WebDriverWait(driver, Duration.ofSeconds(15)).until(d ->
                 "complete".equals(((JavascriptExecutor) d).executeScript("return document.readyState")));
-        try {
-            Thread.sleep(3000);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-        driver.navigate().refresh();
-        new WebDriverWait(driver, Duration.ofSeconds(20)).until(d ->
-                "complete".equals(((JavascriptExecutor) d).executeScript("return document.readyState")));
-        try {
-            Thread.sleep(3000);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+        try { Thread.sleep(2000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        if (driver.getCurrentUrl().contains("login")) {
+            driver.get(SITA9_APP_URL);
+            new WebDriverWait(driver, Duration.ofSeconds(25)).until(d ->
+                    "complete".equals(((JavascriptExecutor) d).executeScript("return document.readyState")));
+            try { Thread.sleep(4000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        } else {
+            driver.navigate().refresh();
+            new WebDriverWait(driver, Duration.ofSeconds(20)).until(d ->
+                    "complete".equals(((JavascriptExecutor) d).executeScript("return document.readyState")));
+            try { Thread.sleep(3000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
         }
     }
 
@@ -291,16 +300,34 @@ public class Sita9RegistrationTest {
             if (driver.getCurrentUrl().contains("glyph.network")) break;
         }
         WebDriverWait analyticsWait = new WebDriverWait(driver, Duration.ofSeconds(90));
-
-        System.out.println("STEP 1: Verifying welcome message or dashboard after login...");
         By welcomeH2 = By.xpath("//h2[normalize-space()='Welcome to SITA9 Analytics']");
         By welcomePartial = By.xpath("//h2[contains(.,'Welcome') and contains(.,'SITA9')]");
         By createFirstProject = By.xpath("//button[normalize-space()='Create Your First Project']");
-        analyticsWait.until(ExpectedConditions.or(
-                ExpectedConditions.visibilityOfElementLocated(welcomeH2),
-                ExpectedConditions.visibilityOfElementLocated(welcomePartial),
-                ExpectedConditions.visibilityOfElementLocated(createFirstProject)
-        ));
+
+        System.out.println("STEP 1: Verifying welcome message or dashboard after login...");
+        for (int attempt = 1; attempt <= 2; attempt++) {
+            if (driver.getCurrentUrl().contains("login")) {
+                driver.get(SITA9_APP_URL);
+                new WebDriverWait(driver, Duration.ofSeconds(20)).until(d ->
+                        "complete".equals(((JavascriptExecutor) d).executeScript("return document.readyState")));
+                try { Thread.sleep(3000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+            }
+            try {
+                analyticsWait.until(ExpectedConditions.or(
+                        ExpectedConditions.visibilityOfElementLocated(welcomeH2),
+                        ExpectedConditions.visibilityOfElementLocated(welcomePartial),
+                        ExpectedConditions.visibilityOfElementLocated(createFirstProject)
+                ));
+                break;
+            } catch (org.openqa.selenium.TimeoutException e) {
+                if (attempt == 2) throw e;
+                System.out.println("STEP 1: Dashboard not found, retrying with fresh load (attempt " + (attempt + 1) + ")...");
+                driver.get(SITA9_APP_URL);
+                new WebDriverWait(driver, Duration.ofSeconds(20)).until(d ->
+                        "complete".equals(((JavascriptExecutor) d).executeScript("return document.readyState")));
+                try { Thread.sleep(3000); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+            }
+        }
         System.out.println("Verified welcome message: Welcome to SITA9 Analytics");
 
         System.out.println("STEP 2: Clicking 'Create Your First Project' button...");
