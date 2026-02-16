@@ -1,0 +1,58 @@
+name: SITA9 Automation Tests
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Cache Maven packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-m2-
+
+      - name: Install Chrome
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget
+          wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+          sudo apt-get install -y ./google-chrome-stable_current_amd64.deb || (sudo apt-get install -f -y && sudo dpkg -i google-chrome-stable_current_amd64.deb)
+          google-chrome-stable --version
+
+      - name: Run tests (headless)
+        run: mvn clean test -Dheadless=true
+        env:
+          GITHUB_ACTIONS: true
+
+      - name: Upload test reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: surefire-reports
+          path: target/surefire-reports/
+          retention-days: 7
+
+      - name: Upload signup-emails (if present)
+        uses: actions/upload-artifact@v4
+        if: success() && hashFiles('signup-emails.txt') != ''
+        with:
+          name: signup-emails
+          path: signup-emails.txt
+          retention-days: 1

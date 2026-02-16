@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.sita9</groupId>
+    <artifactId>Sita9Automation</artifactId>
+    <version>1.0-SNAPSHOT</version>
+    <packaging>jar</packaging>
+
+    <name>Sita9 Registration Automation</name>
+    <description>Automated account registration with proxy rotation</description>
+
+    <properties>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <selenium.version>4.18.1</selenium.version>
+        <testng.version>6.14.3</testng.version>
+        <webdrivermanager.version>5.6.2</webdrivermanager.version>
+    </properties>
+
+    <dependencies>
+        <!-- Selenium WebDriver -->
+        <dependency>
+            <groupId>org.seleniumhq.selenium</groupId>
+            <artifactId>selenium-java</artifactId>
+            <version>${selenium.version}</version>
+        </dependency>
+
+        <!-- ChromeDriver Manager -->
+        <dependency>
+            <groupId>io.github.bonigarcia</groupId>
+            <artifactId>webdrivermanager</artifactId>
+            <version>${webdrivermanager.version}</version>
+        </dependency>
+
+        <!-- TestNG -->
+        <dependency>
+            <groupId>org.testng</groupId>
+            <artifactId>testng</artifactId>
+            <version>${testng.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- JSON Processing (for API responses) -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>2.15.2</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- Compiler -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.11.0</version>
+                <configuration>
+                    <source>17</source>
+                    <target>17</target>
+                </configuration>
+            </plugin>
+
+            <!-- TestNG + Surefire (CRITICAL for Selenium) -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.2.5</version>
+                <configuration>
+                    <!-- Ignore WebDriver cleanup errors -->
+                    <systemPropertyVariables>
+                        <webdriver.chrome.driver>/dev/null</webdriver.chrome.driver>
+                        <webdriver.chrome.silentOutput>true</webdriver.chrome.silentOutput>
+                        <webdriver.chrome.logfile>/dev/null</webdriver.chrome.logfile>
+                    </systemPropertyVariables>
+                    
+                    <!-- Don't fail on driver exceptions -->
+                    <skipAfterFailureCount>100</skipAfterFailureCount>
+                    
+                    <!-- Parallel execution OFF (Selenium needs sequential) -->
+                    <parallel>none</parallel>
+                    <threadCount>1</threadCount>
+                    
+                    <!-- Include all tests -->
+                    <includes>
+                        <include>**/*Test.java</include>
+                    </includes>
+                    
+                    <!-- Fork to avoid port conflicts -->
+                    <forkCount>1</forkCount>
+                    <reuseForks>false</reuseForks>
+                </configuration>
+            </plugin>
+
+            <!-- Reports -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-report-plugin</artifactId>
+                <version>3.2.5</version>
+            </plugin>
+
+            <!-- JAR Packaging -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.3.0</version>
+                <configuration>
+                    <archive>
+                        <manifest>
+                            <addClasspath>true</addClasspath>
+                            <mainClass>org.Sita9RegistrationTest</mainClass>
+                        </manifest>
+                    </archive>
+                </configuration>
+            </plugin>
+
+            <!-- Shade Plugin for Standalone JAR -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.5.1</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <transformers>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                    <mainClass>org.Sita9RegistrationTest</mainClass>
+                                </transformer>
+                            </transformers>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+    <!-- PROFILES for different environments -->
+    <profiles>
+        <!-- Headless for CI/CD -->
+        <profile>
+            <id>headless</id>
+            <activation>
+                <property>
+                    <name>headless</name>
+                    <value>true</value>
+                </property>
+            </activation>
+            <properties>
+                <headless.arg>--headless=new --disable-gpu --window-size=1920,1080</headless.arg>
+            </properties>
+        </profile>
+
+        <!-- Proxy Testing -->
+        <profile>
+            <id>proxies</id>
+            <properties>
+                <proxies.sample>127.0.0.1:8080,127.0.0.1:3128</proxies.sample>
+            </properties>
+        </profile>
+    </profiles>
+</project>
