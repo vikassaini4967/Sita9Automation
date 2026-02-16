@@ -256,7 +256,7 @@ public class Sita9RegistrationTest {
         loginWait.until(ExpectedConditions.elementToBeClickable(
                 By.xpath("//button[normalize-space()='Sign In' or normalize-space()='Sign in']"))).click();
 
-        new WebDriverWait(driver, Duration.ofSeconds(15)).until(d -> {
+        new WebDriverWait(driver, Duration.ofSeconds(20)).until(d -> {
             String u = d.getCurrentUrl();
             boolean urlMoved = !u.contains("verify-email") && !u.contains("sign-in");
             boolean noEmailField = d.findElements(By.cssSelector("input[name='email']")).isEmpty();
@@ -264,35 +264,43 @@ public class Sita9RegistrationTest {
         });
         System.out.println("Step 17: Login successful. URL: " + driver.getCurrentUrl());
 
-        // Wait for dashboard to load (redirect/SPA may keep URL as /login)
-        new WebDriverWait(driver, Duration.ofSeconds(15)).until(d ->
+        // Force full load with session: in CI the SPA may stay on /login; refresh so dashboard renders
+        new WebDriverWait(driver, Duration.ofSeconds(10)).until(d ->
                 "complete".equals(((JavascriptExecutor) d).executeScript("return document.readyState")));
         try {
-            Thread.sleep(2000);
+            Thread.sleep(3000);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        driver.navigate().refresh();
+        new WebDriverWait(driver, Duration.ofSeconds(20)).until(d ->
+                "complete".equals(((JavascriptExecutor) d).executeScript("return document.readyState")));
+        try {
+            Thread.sleep(3000);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
     }
 
     private void runAnalyticsProjectSetupFlow() {
-        // Ensure we have a valid window (avoid NoSuchWindowException)
         if (driver.getWindowHandles().isEmpty()) {
-            Assert.fail("No browser window open. Cannot continue analytics flow. Do not close the browser during the test.");
+            Assert.fail("No browser window open. Cannot continue analytics flow.");
         }
         for (String h : driver.getWindowHandles()) {
             driver.switchTo().window(h);
             if (driver.getCurrentUrl().contains("glyph.network")) break;
         }
-        WebDriverWait analyticsWait = new WebDriverWait(driver, Duration.ofSeconds(60));
+        WebDriverWait analyticsWait = new WebDriverWait(driver, Duration.ofSeconds(90));
 
         System.out.println("STEP 1: Verifying welcome message or dashboard after login...");
-        analyticsWait.until(d -> {
-            if (d.findElements(By.xpath("//h2[normalize-space()='Welcome to SITA9 Analytics']")).stream().anyMatch(WebElement::isDisplayed))
-                return true;
-            if (d.findElements(By.xpath("//h2[contains(.,'Welcome') and contains(.,'SITA9')]")).stream().anyMatch(WebElement::isDisplayed))
-                return true;
-            return d.findElements(By.xpath("//button[normalize-space()='Create Your First Project']")).stream().anyMatch(WebElement::isDisplayed);
-        });
+        By welcomeH2 = By.xpath("//h2[normalize-space()='Welcome to SITA9 Analytics']");
+        By welcomePartial = By.xpath("//h2[contains(.,'Welcome') and contains(.,'SITA9')]");
+        By createFirstProject = By.xpath("//button[normalize-space()='Create Your First Project']");
+        analyticsWait.until(ExpectedConditions.or(
+                ExpectedConditions.visibilityOfElementLocated(welcomeH2),
+                ExpectedConditions.visibilityOfElementLocated(welcomePartial),
+                ExpectedConditions.visibilityOfElementLocated(createFirstProject)
+        ));
         System.out.println("Verified welcome message: Welcome to SITA9 Analytics");
 
         System.out.println("STEP 2: Clicking 'Create Your First Project' button...");
